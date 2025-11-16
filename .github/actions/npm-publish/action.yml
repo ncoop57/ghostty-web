@@ -25,6 +25,7 @@ runs:
       with:
         node-version: '20'
         registry-url: 'https://registry.npmjs.org'
+        # Note: OIDC token must be available from parent workflow with id-token: write
 
     - name: Generate version
       id: version
@@ -95,6 +96,14 @@ runs:
           echo "Version ${VERSION} does not exist, will publish"
         fi
 
+    - name: Debug npm config
+      shell: bash
+      run: |
+        echo "Checking npm configuration..."
+        npm config list
+        echo "ACTIONS_ID_TOKEN_REQUEST_URL: ${ACTIONS_ID_TOKEN_REQUEST_URL:-not set}"
+        echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+is set}"
+        
     - name: Publish to npm (with OIDC trusted publishing)
       if: steps.check-exists.outputs.exists == 'false'
       shell: bash
