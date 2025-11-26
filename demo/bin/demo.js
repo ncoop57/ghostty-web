@@ -215,6 +215,10 @@ const HTML_TEMPLATE = `<!doctype html>
         rows: 24,
         fontFamily: 'JetBrains Mono, Menlo, Monaco, monospace',
         fontSize: 14,
+        theme: {
+          background: '#1e1e1e',
+          foreground: '#d4d4d4',
+        },
       });
 
       const fitAddon = new FitAddon();

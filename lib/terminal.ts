@@ -36,6 +36,7 @@ import { OSC8LinkProvider } from './providers/osc8-link-provider';
 import { UrlRegexProvider } from './providers/url-regex-provider';
 import { CanvasRenderer } from './renderer';
 import { SelectionManager } from './selection-manager';
+import type { GhosttyTerminalConfig } from './types';
 import type { ILink, ILinkProvider } from './types';
 
 // ============================================================================
@@ -175,6 +176,82 @@ export class Terminal implements ITerminalCore {
   }
 
   // ==========================================================================
+  // Theme to WASM Config Conversion
+  // ==========================================================================
+
+  /**
+   * Parse a CSS color string to 0xRRGGBB format.
+   * Returns 0 if the color is undefined or invalid.
+   */
+  private parseColorToHex(color?: string): number {
+    if (!color) return 0;
+
+    // Handle hex colors (#RGB, #RRGGBB)
+    if (color.startsWith('#')) {
+      let hex = color.slice(1);
+      if (hex.length === 3) {
+        hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+      }
+      const value = Number.parseInt(hex, 16);
+      return Number.isNaN(value) ? 0 : value;
+    }
+
+    // Handle rgb(r, g, b) format
+    const match = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+    if (match) {
+      const r = Number.parseInt(match[1], 10);
+      const g = Number.parseInt(match[2], 10);
+      const b = Number.parseInt(match[3], 10);
+      return (r << 16) | (g << 8) | b;
+    }
+
+    return 0;
+  }
+
+  /**
+   * Convert terminal options to WASM terminal config.
+   */
+  private buildWasmConfig(): GhosttyTerminalConfig | undefined {
+    const theme = this.options.theme;
+    const scrollback = this.options.scrollback;
+
+    // If no theme and default scrollback, use defaults
+    if (!theme && scrollback === 1000) {
+      return undefined;
+    }
+
+    // Build palette array from theme colors
+    // Order: black, red, green, yellow, blue, magenta, cyan, white,
+    //        brightBlack, brightRed, brightGreen, brightYellow, brightBlue, brightMagenta, brightCyan, brightWhite
+    const palette: number[] = [
+      this.parseColorToHex(theme?.black),
+      this.parseColorToHex(theme?.red),
+      this.parseColorToHex(theme?.green),
+      this.parseColorToHex(theme?.yellow),
+      this.parseColorToHex(theme?.blue),
+      this.parseColorToHex(theme?.magenta),
+      this.parseColorToHex(theme?.cyan),
+      this.parseColorToHex(theme?.white),
+      this.parseColorToHex(theme?.brightBlack),
+      this.parseColorToHex(theme?.brightRed),
+      this.parseColorToHex(theme?.brightGreen),
+      this.parseColorToHex(theme?.brightYellow),
+      this.parseColorToHex(theme?.brightBlue),
+      this.parseColorToHex(theme?.brightMagenta),
+      this.parseColorToHex(theme?.brightCyan),
+      this.parseColorToHex(theme?.brightWhite),
+    ];
+
+    return {
+      scrollbackLimit: scrollback,
+      fgColor: this.parseColorToHex(theme?.foreground),
+      bgColor: this.parseColorToHex(theme?.background),
+      cursorColor: this.parseColorToHex(theme?.cursor),
+      palette,
+    };
+  }
+
+  // ==========================================================================
   // Option Change Handling (for mutable options)
   // ==========================================================================
 
@@ -248,8 +325,9 @@ export class Terminal implements ITerminalCore {
         parent.setAttribute('tabindex', '0');
       }
 
-      // Create WASM terminal with current dimensions
-      this.wasmTerm = this.ghostty!.createTerminal(this.cols, this.rows);
+      // Create WASM terminal with current dimensions and theme config
+      const wasmConfig = this.buildWasmConfig();
+      this.wasmTerm = this.ghostty!.createTerminal(this.cols, this.rows, wasmConfig);
 
       // Create canvas element
       this.canvas = document.createElement('canvas');
@@ -549,7 +627,8 @@ export class Terminal implements ITerminalCore {
     if (this.wasmTerm) {
       this.wasmTerm.free();
     }
-    this.wasmTerm = this.ghostty!.createTerminal(this.cols, this.rows);
+    const wasmConfig = this.buildWasmConfig();
+    this.wasmTerm = this.ghostty!.createTerminal(this.cols, this.rows, wasmConfig);
 
     // Clear renderer
     this.renderer!.clear();

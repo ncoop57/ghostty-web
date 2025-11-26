@@ -8,7 +8,9 @@
 import {
   CellFlags,
   type Cursor,
+  GHOSTTY_CONFIG_SIZE,
   type GhosttyCell,
+  type GhosttyTerminalConfig,
   type GhosttyWasmExports,
   KeyEncoderOption,
   type KeyEvent,
@@ -49,8 +51,12 @@ export class Ghostty {
   /**
    * Create a terminal emulator instance
    */
-  createTerminal(cols: number = 80, rows: number = 24): GhosttyTerminal {
-    return new GhosttyTerminal(this.exports, this.memory, cols, rows);
+  createTerminal(
+    cols: number = 80,
+    rows: number = 24,
+    config?: GhosttyTerminalConfig
+  ): GhosttyTerminal {
+    return new GhosttyTerminal(this.exports, this.memory, cols, rows, config);
   }
 
   /**
@@ -286,20 +292,67 @@ export class GhosttyTerminal {
    * @param memory WASM memory
    * @param cols Number of columns (default: 80)
    * @param rows Number of rows (default: 24)
+   * @param config Optional terminal configuration (colors, scrollback)
    * @throws Error if allocation fails
    */
   constructor(
     exports: GhosttyWasmExports,
     memory: WebAssembly.Memory,
     cols: number = 80,
-    rows: number = 24
+    rows: number = 24,
+    config?: GhosttyTerminalConfig
   ) {
     this.exports = exports;
     this.memory = memory;
     this._cols = cols;
     this._rows = rows;
 
-    const handle = this.exports.ghostty_terminal_new(cols, rows);
+    let handle: TerminalHandle;
+
+    if (config) {
+      // Allocate config struct in WASM memory
+      const configPtr = this.exports.ghostty_wasm_alloc_u8_array(GHOSTTY_CONFIG_SIZE);
+      if (configPtr === 0) {
+        throw new Error('Failed to allocate config (out of memory)');
+      }
+
+      try {
+        // Write config to WASM memory
+        const view = new DataView(this.memory.buffer);
+        let offset = configPtr;
+
+        // scrollback_limit (u32)
+        view.setUint32(offset, config.scrollbackLimit ?? 10000, true);
+        offset += 4;
+
+        // fg_color (u32)
+        view.setUint32(offset, config.fgColor ?? 0, true);
+        offset += 4;
+
+        // bg_color (u32)
+        view.setUint32(offset, config.bgColor ?? 0, true);
+        offset += 4;
+
+        // cursor_color (u32)
+        view.setUint32(offset, config.cursorColor ?? 0, true);
+        offset += 4;
+
+        // palette[16] (u32 * 16)
+        for (let i = 0; i < 16; i++) {
+          const color = config.palette?.[i] ?? 0;
+          view.setUint32(offset, color, true);
+          offset += 4;
+        }
+
+        handle = this.exports.ghostty_terminal_new_with_config(cols, rows, configPtr);
+      } finally {
+        // Free config memory
+        this.exports.ghostty_wasm_free_u8_array(configPtr, GHOSTTY_CONFIG_SIZE);
+      }
+    } else {
+      handle = this.exports.ghostty_terminal_new(cols, rows);
+    }
+
     if (handle === 0) {
       throw new Error('Failed to allocate terminal (out of memory)');
     }

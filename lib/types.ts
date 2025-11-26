@@ -388,6 +388,25 @@ export interface GhosttyWasmExports extends WebAssembly.Exports {
 // ============================================================================
 
 /**
+ * Terminal configuration for WASM.
+ * All colors use 0xRRGGBB format. A value of 0 means "use default".
+ */
+export interface GhosttyTerminalConfig {
+  scrollbackLimit?: number;
+  fgColor?: number; // 0xRRGGBB
+  bgColor?: number; // 0xRRGGBB
+  cursorColor?: number; // 0xRRGGBB
+  palette?: number[]; // 16 colors, 0xRRGGBB format
+}
+
+/**
+ * Size of GhosttyTerminalConfig struct in WASM memory (bytes).
+ * Layout: scrollback_limit(u32) + fg_color(u32) + bg_color(u32) + cursor_color(u32) + palette[16](u32*16)
+ * Total: 4 + 4 + 4 + 4 + 64 = 80 bytes
+ */
+export const GHOSTTY_CONFIG_SIZE = 80;
+
+/**
  * Opaque terminal pointer (WASM memory address)
  */
 export type TerminalHandle = number;
