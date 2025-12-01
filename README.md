@@ -1,141 +1,82 @@
 # ghostty-web
 
-![ghostty](https://github.com/user-attachments/assets/aceee7eb-d57b-4d89-ac3d-ee1885d0187a)
+[![NPM Version](https://img.shields.io/npm/v/ghostty-web)](https://npmjs.com/package/ghostty-web) [![NPM Downloads](https://img.shields.io/npm/dw/ghostty-web)](https://npmjs.com/package/ghostty-web) [![license](https://img.shields.io/github/license/coder/ghostty-web)](./LICENSE)
 
-`ghostty-web` is a web terminal developed for [mux](https://github.com/coder/mux) that leverages
-[Ghostty's](https://github.com/ghostty-org/ghostty)
-terminal emulation core via WebAssembly. Because it leans on Ghostty to handle the complexity of terminal
-emulation, `ghostty-web` can deliver fast, robust terminal emulation in the browser. The intent is
-for this project to become a drop-in replacement for xterm.js. Under heavy development, no compatibility guarantees yet.
+[Ghostty](https://github.com/ghostty-org/ghostty) for the web with [xterm.js](https://github.com/xtermjs/xterm.js) API compatibility — giving you a proper VT100 implementation in the browser, not a JavaScript approximation of one.
 
-## Live Demo
+- Migrate from xterm by changing your import: `@xterm/xterm` → `ghostty-web`
+- WASM-compiled parser from Ghostty—the same code that runs the native app
+- Zero runtime dependencies, ~400KB WASM bundle
 
-Try ghostty-web yourself with:
+## Try It
 
 ```bash
 npx @ghostty-web/demo@next
 ```
 
-This starts a local demo server with a real shell session. The demo server works best when run from Linux, but you can also try
-it on macOS. Windows is not supported (yet).
+This starts a local HTTP server with a real shell on `http://localhost:8080`. Works best on Linux and macOS.
 
-<details>
-<summary>Development setup (building from source)</summary>
+![ghostty](https://github.com/user-attachments/assets/aceee7eb-d57b-4d89-ac3d-ee1885d0187a)
 
-> Requires Zig and Bun, see [Development](#development)
+## Comparison with xterm.js
 
-```bash
-git clone https://github.com/coder/ghostty-web
-cd ghostty-web
-bun install
-bun run build # Builds the WASM module and library
-bun run demo:dev # http://localhost:8000/demo/
-```
+xterm.js is everywhere—VS Code, Hyper, countless web terminals. But it has fundamental issues:
 
-</details>
+| Issue                                    | xterm.js                                                            | ghostty-web                |
+| ---------------------------------------- | ------------------------------------------------------------------- | -------------------------- |
+| **RTL languages**                        | [Broken since 2017](https://github.com/xtermjs/xterm.js/issues/701) | ✓ Works                    |
+| **Complex scripts** (Devanagari, Arabic) | Rendering issues                                                    | ✓ Proper grapheme handling |
+| **XTPUSHSGR/XTPOPSGR**                   | [Not supported](https://github.com/xtermjs/xterm.js/issues/2570)    | ✓ Full support             |
 
-## Getting Started
+xterm.js reimplements terminal emulation in JavaScript. Every escape sequence, every edge case, every Unicode quirk—all hand-coded. Ghostty's emulator is the same battle-tested code that runs the native Ghostty app.
 
-Install the module via npm
+## Installation
 
 ```bash
 npm install ghostty-web
 ```
 
-After install, using `ghostty-web` is as simple as
+## Usage
 
-```html
-<!doctype html>
-<html>
-  <body>
-    <div id="terminal"></div>
-    <script type="module">
-      import { init, Terminal } from 'ghostty-web';
+ghostty-web aims to be API-compatible with the xterm.js API.
 
-      await init();
-      const term = new Terminal();
-      term.open(document.getElementById('terminal'));
-      term.write('Hello from \x1B[1;3;31mghostty-web\x1B[0m $ ');
-    </script>
-  </body>
-</html>
-```
+```javascript
+import { init, Terminal } from 'ghostty-web';
 
-## Features
-
-`ghostty-web` compiles Ghostty's core terminal emulation engine (parser, state
-machine, and screen buffer) to WebAssembly, providing:
-
-**Core Terminal:**
-
-- Full VT100/ANSI escape sequence support
-- True color (24-bit RGB) + 256 color + 16 ANSI colors
-- Text styles: bold, italic, underline, strikethrough, dim, reverse
-- Alternate screen buffer (for vim, htop, less, etc.)
-- Scrollback buffer with mouse wheel support
-
-**Input & Interaction:**
-
-- Text selection and clipboard integration
-- Mouse tracking modes
-- Custom key/wheel event handlers
-
-**API & Integration:**
-
-- xterm.js-compatible API (drop-in replacement for many use cases)
-- FitAddon for responsive terminal sizing
-- Event system (onData, onResize, onBell, onScroll, etc.)
-
-**Performance:**
-
-- Canvas-based rendering at 60 FPS
-- Zero runtime dependencies (just ghostty-web + bundled WASM)
-- Parser/state machine from Ghostty
-
-## Usage Examples
-
-### Basic Terminal
-
-```typescript
-import { init, Terminal, FitAddon } from 'ghostty-web';
-
-// Initialize WASM (call once at app startup)
 await init();
 
 const term = new Terminal({
-  cursorBlink: true,
   fontSize: 14,
   theme: {
-    background: '#1e1e1e',
-    foreground: '#d4d4d4',
+    background: '#1a1b26',
+    foreground: '#a9b1d6',
   },
 });
 
-const fitAddon = new FitAddon();
-term.loadAddon(fitAddon);
-
 term.open(document.getElementById('terminal'));
-fitAddon.fit();
-
-// Handle user input
-term.onData((data) => {
-  // Send to backend/PTY
-  console.log('User typed:', data);
-});
+term.onData((data) => websocket.send(data));
+websocket.onmessage = (e) => term.write(e.data);
 ```
+
+For a comprehensive client <-> server example, refer to the [demo](./demo/index.html#L141).
 
 ## Development
 
-### Prerequisites
+ghostty-web builds from Ghostty's source with a [patch](./patches/ghostty-wasm-api.patch) to expose additional
+functionality.
 
-- [bun](https://bun.com/docs/installation)
-- [zig](https://ziglang.org/download/)
-
-### Building WASM
-
-`ghostty-web` builds a custom WASM binary from Ghostty's source with a patch to expose additional
-functionality
+> Requires Zig and Bun.
 
 ```bash
 bun run build
 ```
+
+Mitchell Hashimoto (author of Ghostty) has [been working](https://mitchellh.com/writing/libghostty-is-coming) on `libghostty` which makes this all possible. The patches are very minimal thanks to the work the Ghostty team has done, and we expect them to get smaller.
+
+This library will eventually consume a native Ghostty WASM distribution once available, and will continue to provide an xterm.js compatible API.
+
+At Coder we're big fans of Ghostty, so kudos to that team for all the amazing work.
+
+## License
+
+[MIT](./LICENSE)
